@@ -1,0 +1,21 @@
+{
+  "name": "telegram-bot-1xbet",
+  "version": "1.0.0",
+  "description": "Bot de Telegram para sistema de recargas 1xBet",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node index.js"
+  },
+  "keywords": ["telegram", "bot", "1xbet", "recargas"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "telegraf": "^4.15.0",
+    "@supabase/supabase-js": "^2.39.0",
+    "dotenv": "^16.3.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
