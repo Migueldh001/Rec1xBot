@@ -17,22 +17,23 @@ async function cargarAdmins() {
     try {
         const { data, error } = await supabase
             .from('users')
-            .select('id')
-            .eq('is_admin', true);
+            .select('telegram_id')
+            .eq('is_admin', true)
+            .not('telegram_id', 'is', null);
         
         if (error) throw error;
         
         if (data && data.length > 0) {
-            ADMIN_IDS = data.map(user => {
-                // Convertir UUID a Telegram ID (necesitamos mapeo)
-                // Por ahora solo usamos el ID de .env
-                return parseInt(process.env.ADMIN_ID);
-            });
+            ADMIN_IDS = data.map(user => user.telegram_id);
+            console.log('✅ Admins cargados desde BD:', ADMIN_IDS);
+        } else {
+            // Fallback al .env si no hay admins en BD
+            ADMIN_IDS = [parseInt(process.env.ADMIN_ID)];
+            console.log('⚠️ No hay admins en BD, usando .env:', ADMIN_IDS);
         }
-        
-        console.log('✅ Admins cargados:', ADMIN_IDS);
     } catch (error) {
         console.error('❌ Error cargando admins:', error.message);
+        ADMIN_IDS = [parseInt(process.env.ADMIN_ID)];
     }
 }
 
@@ -46,7 +47,7 @@ bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const username = ctx.from.username || ctx.from.first_name;
     
-    console.log(`👤 Usuario ${username} (${userId}) ejecutó /start`);
+    console.log(`👤 ${username} (${userId}) ejecutó /start`);
     
     try {
         // Verificar si el usuario existe en la BD
@@ -61,14 +62,17 @@ bot.start(async (ctx) => {
         }
         
         if (userData) {
-            // Usuario ya registrado
-            if (userData.is_admin || esAdmin(ctx)) {
+            // Usuario registrado
+            if (userData.is_admin) {
+                console.log('👑 Admin detectado');
                 await mostrarMenuAdmin(ctx);
             } else {
+                console.log('👤 Usuario normal');
                 await mostrarMenuUsuario(ctx);
             }
         } else {
-            // Usuario nuevo - Mostrar bienvenida
+            // Usuario nuevo
+            console.log('🆕 Usuario nuevo');
             await mostrarBienvenida(ctx);
         }
     } catch (error) {
