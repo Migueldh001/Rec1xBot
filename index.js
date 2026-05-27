@@ -345,6 +345,54 @@ async function iniciarBot() {
         await cargarAdmins();
         await bot.launch();
         console.log('✅ Bot iniciado');
+
+// TEST DE CONEXIÓN A SUPABASE
+async function testSupabase() {
+    console.log('\n=== TEST SUPABASE ===');
+    console.log('URL:', process.env.SUPABASE_URL);
+    console.log('Key existe:', !!process.env.SUPABASE_ANON_KEY);
+    
+    try {
+        // Test 1: Ver todos los usuarios
+        const { data: allUsers, error: error1 } = await supabase
+            .from('users')
+            .select('*');
+        
+        console.log('\n📊 Todos los usuarios:');
+        console.log('   Cantidad:', allUsers?.length || 0);
+        console.log('   Datos:', allUsers);
+        console.log('   Error:', error1);
+        
+        // Test 2: Buscar '1xbet'
+        const { data: adminUser, error: error2 } = await supabase
+            .from('users')
+            .select('*')
+            .eq('bet_id', '1xbet')
+            .single();
+        
+        console.log('\n🔍 Búsqueda de 1xbet:');
+        console.log('   Encontrado:', !!adminUser);
+        console.log('   Datos:', adminUser);
+        console.log('   Error:', error2);
+        console.log('   Error code:', error2?.code);
+        
+        // Test 3: Buscar sin single()
+        const { data: adminUser2, error: error3 } = await supabase
+            .from('users')
+            .select('*')
+            .eq('bet_id', '1xbet');
+        
+        console.log('\n🔍 Búsqueda sin single():');
+        console.log('   Datos:', adminUser2);
+        console.log('   Error:', error3);
+        
+    } catch (err) {
+        console.error('❌ Error en test:', err);
+    }
+    console.log('=== FIN TEST ===\n');
+}
+
+testSupabase();
         
         process.once('SIGINT', () => bot.stop('SIGINT'));
         process.once('SIGTERM', () => bot.stop('SIGTERM'));
