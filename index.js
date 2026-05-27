@@ -1,20 +1,13 @@
 // index.js - Bot de Telegram para 1xBet Recargas
 require('dotenv').config();
 const { Telegraf, Markup, session } = require('telegraf');
-const LocalSession = require('telegraf-session-local');
 const supabase = require('./src/database');
-
-// Inicializar sesión local
-const localSession = new LocalSession({
-    database: 'sessions.json',
-    storage: LocalSession.storageMemory
-});
 
 // Inicializar bot
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Usar middleware de sesión
-bot.use(localSession.middleware());
+// Usar sesión en memoria (más simple)
+bot.use(session());
 
 // IDs de administradores
 let ADMIN_IDS = [];
@@ -70,6 +63,11 @@ bot.start(async (ctx) => {
     const username = ctx.from.username || ctx.from.first_name;
     
     console.log(`\n👤 ${username} (${userId}) ejecutó /start`);
+    
+    // Inicializar sesión SI NO EXISTE
+    if (!ctx.session) {
+        ctx.session = {};
+    }
     
     // Limpiar sesión
     ctx.session = {};
@@ -241,25 +239,33 @@ bot.action('volver_inicio', async (ctx) => {
 
 // Manejador de mensajes de texto
 bot.on('text', async (ctx) => {
-    const texto = ctx.message.text.trim();
-    
-    console.log(`📝 Mensaje recibido: "${texto}"`);
-    console.log(`📋 Sesión actual:`, ctx.session);
-    
-    // Ignorar comandos
-    if (texto.startsWith('/')) return;
-    
-    // Ignorar botones del menú
-    const botones = ['💳', '📋', '📞', '⚙️', '💲', '👥', '📊', '💱', '➕', '👤', '📥'];
-    if (botones.some(b => texto.includes(b))) {
-        return;
-    }
-    
-    // Verificar sesión
-    if (!ctx.session || !ctx.session.esperando) {
-        await ctx.reply('Por favor usa /start para comenzar.');
-        return;
-    }
+                const texto = ctx.message.text.trim();
+                
+                console.log(`📝 Mensaje recibido: "${texto}"`);
+                
+                // Inicializar sesión si no existe
+                if (!ctx.session) {
+                    ctx.session = {};
+                }
+                
+                console.log(`📋 Sesión esperando:`, ctx.session.esperando);
+                console.log(`📋 Datos sesión:`, Object.keys(ctx.session));
+                
+                // Ignorar comandos
+                if (texto.startsWith('/')) return;
+                
+                // Ignorar botones del menú
+                const botones = ['💳', '📋', '📞', '⚙️', '💲', '👥', '📊', '💱', '➕', '👤', '📥'];
+                if (botones.some(b => texto.includes(b))) {
+                    return;
+                }
+                
+                // Verificar sesión
+                if (!ctx.session.esperando) {
+                    console.log('⚠️ No hay estado esperando en la sesión');
+                    await ctx.reply('Por favor usa /start para comenzar.');
+                    return;
+                }
     
     try {
         // === FLUJO DE LOGIN ===
