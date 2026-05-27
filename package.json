@@ -17,6 +17,6 @@
     "telegraf-session-local": "^2.1.0"
   },
   "engines": {
-    "node": "20.x"
+    "node": "18.x"
   }
 }
