@@ -236,35 +236,70 @@ bot.on('text', async (ctx) => {
             
             await ctx.reply('✅ ID correcto.\n\n🔒 Envía tu contraseña:');
         }
-        else if (ctx.session.esperando === 'login_password') {
-            console.log('🔐 Verificando contraseña');
+       else if (ctx.session.esperando === 'login_password') {
+    console.log('🔐 Verificando contraseña para:', ctx.session.user_data.bet_id);
+    
+    const userData = ctx.session.user_data;
+    
+    try {
+        // Verificar contraseña con Supabase Auth
+        const email = userData.is_admin 
+            ? 'admin@1xbet.com' 
+            : `${userData.bet_id}@1xbet-user.local`;
+        
+        console.log('   Email para login:', email);
+        
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+            email: email,
+            password: texto
+        });
+        
+        if (authError) {
+            console.log('❌ Error auth:', authError.message);
             
-            const passwordOk = texto === 'Recarga1xbet';
-            
-            if (!passwordOk) {
+            // Si es admin, verificar contraseña hardcodeada como fallback
+            if (userData.is_admin && texto === 'Recarga1xbet') {
+                console.log('✅ Admin con contraseña hardcodeada');
+            } else {
                 await ctx.reply('❌ Contraseña incorrecta.\n\nIntenta de nuevo:');
                 return;
             }
-            
-            const userData = ctx.session.user_data;
-            
+        } else {
+            console.log('✅ Contraseña correcta');
+        }
+        
+        // Actualizar telegram_id si no está
+        if (userData.telegram_id !== ctx.from.id) {
             await supabase
                 .from('users')
                 .update({ telegram_id: ctx.from.id })
                 .eq('id', userData.id);
             
-            await cargarAdmins();
-            
-            ctx.session = {};
-            
-            await ctx.reply('✅ Sesión iniciada');
-            
-            if (userData.is_admin) {
-                await mostrarMenuAdmin(ctx);
-            } else {
-                await mostrarMenuUsuario(ctx);
-            }
+            console.log('✅ telegram_id actualizado');
         }
+        
+        // Recargar admins si es admin
+        if (userData.is_admin) {
+            await cargarAdmins();
+        }
+        
+        ctx.session = {};
+        
+        await ctx.reply('✅ Sesión iniciada correctamente');
+        
+        if (userData.is_admin) {
+            await mostrarMenuAdmin(ctx);
+        } else {
+            await mostrarMenuUsuario(ctx);
+        }
+        
+    } catch (error) {
+        console.error('❌ Error en login:', error);
+        await ctx.reply('❌ Error al iniciar sesión.\n\nUsa /start para reintentar.');
+        ctx.session = {};
+    }
+}
+     
         // REGISTRO
         else if (ctx.session.esperando === 'bet_id') {
             ctx.session.bet_id = texto;
@@ -292,33 +327,113 @@ bot.on('text', async (ctx) => {
             await ctx.reply('🔒 Repite la contraseña:');
         }
         else if (ctx.session.esperando === 'confirm_password') {
-            if (texto !== ctx.session.password) {
-                await ctx.reply('❌ No coinciden.\n\nEnvía la contraseña de nuevo:');
-                ctx.session.esperando = 'password';
-                return;
-            }
-            
-            const { data, error } = await supabase
-                .from('users')
-                .insert([{
-                    bet_id: ctx.session.bet_id,
-                    phone: ctx.session.phone,
-                    telegram_id: ctx.from.id,
-                    is_admin: false
-                }])
-                .select()
-                .single();
-            
-            if (error) {
-                console.error('Error registro:', error);
-                await ctx.reply('❌ Error. Intenta más tarde.');
-                return;
-            }
-            
+    if (texto !== ctx.session.password) {
+        await ctx.reply('❌ No coinciden.\n\nEnvía la contraseña de nuevo:');
+        ctx.session.esperando = 'password';
+        return;
+    }
+    
+    try {
+        console.log('📝 Intentando registrar usuario...');
+        console.log('   bet_id:', ctx.session.bet_id);
+        console.log('   phone:', ctx.session.phone);
+        console.log('   telegram_id:', ctx.from.id);
+        
+        // Verificar si el bet_id ya existe
+        const { data: existingUser, error: checkError } = await supabase
+            .from('users')
+            .select('bet_id')
+            .eq('bet_id', ctx.session.bet_id)
+            .single();
+        
+        if (existingUser) {
+            await ctx.reply('❌ Este ID 1xBet ya está registrado.\n\nUsa /start para iniciar sesión.');
             ctx.session = {};
-            await ctx.reply('✅ ¡Registro exitoso!');
-            await mostrarMenuUsuario(ctx);
+            return;
         }
+        
+        // Verificar si el telegram_id ya existe
+        const { data: existingTelegram } = await supabase
+            .from('users')
+            .select('telegram_id')
+            .eq('telegram_id', ctx.from.id)
+            .single();
+        
+        if (existingTelegram) {
+            await ctx.reply('❌ Ya tienes una cuenta registrada.\n\nUsa /start para iniciar sesión.');
+            ctx.session = {};
+            return;
+        }
+        
+        // Crear usuario en Auth de Supabase
+        const email = `${ctx.session.bet_id}@1xbet-user.local`;
+        
+        const { data: authData, error: authError } = await supabase.auth.signUp({
+            email: email,
+            password: ctx.session.password,
+            options: {
+                data: {
+                    bet_id: ctx.session.bet_id,
+                    phone: ctx.session.phone
+                }
+            }
+        });
+        
+        if (authError) {
+            console.error('❌ Error en Auth:', authError);
+            throw authError;
+        }
+        
+        console.log('✅ Usuario creado en Auth');
+        
+        // Insertar en tabla users
+        const { data: userData, error: dbError } = await supabase
+            .from('users')
+            .insert([{
+                id: authData.user.id,
+                bet_id: ctx.session.bet_id,
+                phone: ctx.session.phone,
+                telegram_id: ctx.from.id,
+                is_admin: false
+            }])
+            .select()
+            .single();
+        
+        if (dbError) {
+            console.error('❌ Error insertando en BD:', dbError);
+            console.error('   Code:', dbError.code);
+            console.error('   Message:', dbError.message);
+            console.error('   Details:', dbError.details);
+            throw dbError;
+        }
+        
+        console.log('✅ Usuario creado en BD:', userData);
+        
+        ctx.session = {};
+        
+        await ctx.reply('✅ ¡Registro exitoso!\n\nYa puedes usar el sistema de recargas.');
+        await mostrarMenuUsuario(ctx);
+        
+    } catch (error) {
+        console.error('❌ Error completo en registro:', error);
+        console.error('   Stack:', error.stack);
+        
+        let errorMsg = '❌ Error al registrar. ';
+        
+        if (error.message?.includes('already registered')) {
+            errorMsg += 'Este email ya existe.';
+        } else if (error.code === '23505') {
+            errorMsg += 'Este ID ya está registrado.';
+        } else {
+            errorMsg += 'Intenta más tarde.';
+        }
+        
+        await ctx.reply(errorMsg + '\n\nUsa /start para volver.');
+        ctx.session = {};
+    }
+}
+        
+        
     } catch (error) {
         console.error('Error:', error);
         await ctx.reply('❌ Error. Usa /start');
